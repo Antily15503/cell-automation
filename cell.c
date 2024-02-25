@@ -2,27 +2,29 @@
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
+#include <unistd.h>
 
 //url to paper on SmoothLife: https://arxiv.org/pdf/1111.1567.pdf
 
 /**************CONSTANTS THAT YOU CAN CHANGE***************/
-#define WIDTH 10 //width of grid
-#define HEIGHT 10 //height of grid
+#define WIDTH 120 //width of grid
+#define HEIGHT 70 //height of grid
 float alpha = 0.028; //alphaN
 //float alpha = 0.147; //alphaM 
 
-int ra = 21;//outer barrier radius
-float dt = 1.0f;//change in time per change in frame
+int ra = 20;//outer barrier radius
+float dt = 0.08f;//change in time per change in frame
 
 /**************LIFE AND DEATH CONSTANTS yOu CAN CHANGE***************/
 //b and d parameters represent the death and birth intervals
-float b1 = 0.278;
-float b2 = 0.365;
-float d1 = 0.267;
-float d2 = 0.445;
+float b1 = 0.257;
+float b2 = 0.336;
+float d1 = 0.365;
+float d2 = 0.549;
 
 char level[] = " .:-=o+wxWX#$@"; //what each level brightness corresponds to in ASCII symbols.
 #define level_count (sizeof(level)/sizeof(level[0]) - 1) //how many brightness levels there are defined in this program
+#define gotoxy(x, y) printf("\033[%d;%dH]", (y), (x));
 
 float grid[HEIGHT][WIDTH] = {0}; //the global grid of floats that serves as the map of our automation
 float gridNext[HEIGHT][WIDTH] = {0}; //what the grid of the next frame looks like
@@ -32,24 +34,45 @@ float rand_float(void){  //returns a float somewhere between the value 0 and 1
 }
 
 void set_random_grid(void){ //creates a random grid of variables
+
+    /****GENERATE A RANDOM CANVAS OF RANDOMLY GENERATED VALUES OF DOTS****
     for (size_t i = 0; i < HEIGHT; i++){
         for (size_t j = 0; j < WIDTH; j++){
-            grid[i][j] = rand_float();
+            if(rand_float() > 0.3){
+                grid[i][j] = rand_float();
+            }
+        }
+    }*/
+    /****GENERATE A RANDOM CANVAS OF RANDOMLY GENERATED VALUE IN A small circle****/
+    size_t w = WIDTH/3;
+    size_t h = HEIGHT/2;
+    for(size_t dy = 0; dy < h; dy++){
+        for(size_t dx = 0; dx < w; dx++){
+            size_t x = dx + WIDTH/2 - w/2;
+            size_t y = dy + HEIGHT/2 - h/2;
+            grid[y][x] = rand_float();
         }
     }
 }
 
 void display_grid(float grid[HEIGHT][WIDTH]){ //displays all the values of the grid in terms of levels
+    gotoxy(0, 0); //move cursor to top-left corner of terminal
     for (size_t i = 0; i < HEIGHT; i++){
         for (size_t j = 0; j < WIDTH; j++){
-            char x = level[(int)(grid[i][j]*level_count - 1)]; //set char x (char in array at (i,j)) to be equal to whichever char level the random float returns
-            printf("%c ", x);
+            char x = level[(int)(grid[i][j]*(level_count - 1))]; //set char x (char in array at (i,j)) to be equal to whichever char level the random float returns
+            fputc(x, stdout);
         }
-        printf("\n");
+        fputc('\n', stdout);
     }
+    fputc('\r', stdout);
 }
 
 int emod(int a, int b){ return (a%b + b)%b;} //modulation for both positive and negative numbers
+
+void clamp(float *x, float l, float h){ //clamp operation that forces whatever values of x to be between h and l
+    if (*x < l) *x = l;
+    if (*x > h) *x = h;
+}
 
 //computations for the three sigma equations and s equation
 float sigma_one(float x, float a) {return 1.0f/(1.0f + expf(-(x-a)*(4/alpha)));}
@@ -98,19 +121,27 @@ void compute_next_grid(void){
     }
 }
 
-
-
-int main(void){
-    //set the seed of randomness to be dependent of current time
+int main(void) {
+    struct timespec tim, rem;
+    tim.tv_sec = 0;              // Sleep for 0 seconds initially
+    tim.tv_nsec = 10;     // Sleep for 700 million nanoseconds (0.7 seconds)
     srand(time(0));
     set_random_grid();
-    //update grid
-    compute_next_grid();
-    for(size_t y = 0; y < HEIGHT; y++){
-        for (size_t x = 0; x < WIDTH; x++){
-            grid[y][x] += dt*gridNext[y][x];
-        }
-    }
+
     display_grid(grid);
+
+    for (;;) {
+        compute_next_grid();
+        for (size_t y = 0; y < HEIGHT; y++) {
+            for (size_t x = 0; x < WIDTH; x++) {
+                grid[y][x] += dt * gridNext[y][x];
+                clamp(&grid[y][x], 0, 1);
+            }
+        }
+        display_grid(grid);
+        fflush(stdout);
+        nanosleep(&tim, &rem);
+    }
+
     return 0;
 }
